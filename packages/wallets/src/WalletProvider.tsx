@@ -5,12 +5,13 @@ import {
   AlbedoAdapter,
   FreighterAdapter,
   HanaAdapter,
+  LedgerAdapter,
   RabetAdapter,
   type WalletAdapter,
 } from './adapters/index.js';
 import { isUserRejection, NotSupportedError, toSigningError } from './errors.js';
 
-export type WalletType = 'freighter' | 'albedo' | 'rabe' | 'hana';
+export type WalletType = 'freighter' | 'albedo' | 'rabe' | 'hana' | 'ledger';
 
 export interface WalletContextType {
   activeAddress: string | null;
@@ -47,6 +48,9 @@ const ADAPTERS: Record<WalletType, WalletAdapter> = {
   albedo: new AlbedoAdapter(),
   rabe: new RabetAdapter(),
   hana: new HanaAdapter(),
+  // The adapter only imports Ledger's device packages dynamically, so this does
+  // not pull a transport into the default bundle.
+  ledger: new LedgerAdapter(),
 };
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
@@ -101,12 +105,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   );
 
   const disconnect = useCallback(() => {
+    const adapter = activeProvider ? ADAPTERS[activeProvider] : null;
+
     setActiveAddress(null);
     setActiveProvider(null);
     setError(null);
     localStorage.removeItem(LOCAL_STORAGE_KEY_PROVIDER);
     localStorage.removeItem(LOCAL_STORAGE_KEY_ADDRESS);
-  }, []);
+
+    // Hardware wallets hold a transport open; extension wallets have nothing to
+    // release, so `disconnect` is optional on the shared interface.
+    if (adapter?.disconnect) {
+      void adapter.disconnect().catch((err: unknown) => {
+        console.warn('Wallet disconnect failed:', err);
+      });
+    }
+  }, [activeProvider]);
 
   /** Signs through the active adapter and logs failures at the right level. */
   const signWith = useCallback(
