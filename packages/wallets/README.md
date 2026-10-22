@@ -31,17 +31,14 @@ Calling `useWallet()` outside a `WalletProvider` throws
 Every adapter can connect and sign a transaction envelope. Soroban
 authorization entries need a wallet whose SDK exposes that operation, so only
 Freighter implements `signAuthEntry`; the others raise `NotSupportedError`
-instead of returning an unsigned entry. `disconnect()` is optional on the shared
-interface because extension wallets hold no session of their own; only Ledger
-has a transport to close.
+instead of returning an unsigned entry.
 
-| Adapter            | `WalletType` | Connect | `signTransaction` | `signAuthEntry` | `disconnect` |
-| ------------------ | ------------ | ------- | ----------------- | --------------- | ------------ |
-| `FreighterAdapter` | `freighter`  | Yes     | Yes               | Yes             | No           |
-| `AlbedoAdapter`    | `albedo`     | Yes     | Yes               | No              | No           |
-| `RabetAdapter`     | `rabe`       | Yes     | Yes               | No              | No           |
-| `HanaAdapter`      | `hana`       | Yes     | Yes               | No              | No           |
-| `LedgerAdapter`    | `ledger`     | Yes     | Yes               | No              | Yes          |
+| Adapter            | `WalletType` | Connect | Disconnect | `signTransaction` | `signAuthEntry` |
+| ------------------ | ------------ | ------- | ---------- | ----------------- | --------------- |
+| `FreighterAdapter` | `freighter`  | Yes     | No         | Yes               | Yes             |
+| `AlbedoAdapter`    | `albedo`     | Yes     | No         | Yes               | No              |
+| `RabetAdapter`     | `rabe`       | Yes     | Yes        | Yes               | No              |
+| `HanaAdapter`      | `hana`       | Yes     | No         | Yes               | No              |
 
 An auth-entry flow that targets a wallet without this capability is a
 follow-up feature, not something the dashboard should attempt today.
@@ -153,13 +150,21 @@ export function StreamActions() {
 
 The provider stores the active provider id and address under
 `stellar_starter_kit_wallet_provider` and `stellar_starter_kit_wallet_address`,
-restores them on mount, and removes both on `disconnect()`.
+restores them on mount, and removes both on `disconnect()`. When the active
+adapter exposes `disconnect()` (currently Rabet), the provider also ends the
+extension session and logs a warning instead of failing when the extension has
+gone away.
 
 ### Errors
 
-- **User rejection** – signing rejects with the wallet's message (for example
-  `User rejected the request.`). The provider logs it with `console.warn`, not
-  `console.error`, so a cancelled signature does not look like a crash.
+- **`WalletRejectedError`** – the user explicitly declined the request. Its
+  `code` is `WALLET_REJECTED` and the message is the wallet's own (for example
+  `User rejected the request.`).
+- **`WalletCancelledError`** – the prompt was dismissed or aborted before the
+  user decided. Its `code` is `WALLET_CANCELLED`; the rejection/cancellation
+  split lets callers offer a retry only where it makes sense.
+- Both errors are logged with `console.warn`, not `console.error`, so a
+  cancelled signature does not look like a crash.
 - **`NotSupportedError`** – thrown by `signAuthEntry` when the active adapter
   has no auth-entry support. Its `code` is `NOT_SUPPORTED` and the message
   names the wallet and method.

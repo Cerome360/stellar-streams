@@ -101,16 +101,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const disconnect = useCallback(() => {
     // Invalidate any in-flight restore so it cannot resurrect this session.
     restoreId.current++;
+    const provider = activeProvider;
     setActiveAddress(null);
     setActiveProvider(null);
     setError(null);
     localStorage.removeItem(LOCAL_STORAGE_KEY_PROVIDER);
     localStorage.removeItem(LOCAL_STORAGE_KEY_ADDRESS);
 
-    // Hardware wallets hold a transport open; extension wallets have nothing to
-    // release, so `disconnect` is optional on the shared interface.
-    if (adapter?.disconnect) {
-      void adapter.disconnect().catch((err: unknown) => {
+    // Best-effort: adapters without a revoke API (and extensions that are no
+    // longer installed) must not keep the local session alive.
+    if (provider) {
+      void ADAPTERS[provider].disconnect?.().catch((err: unknown) => {
         console.warn('Wallet disconnect failed:', err);
       });
     }
