@@ -44,11 +44,11 @@ describe('WalletAdapter interface', () => {
     }
   });
 
-  it('exposes disconnect only on adapters whose wallet API supports it', () => {
+  it('exposes disconnect only on adapters that hold a session or device to release', () => {
     const supporting = adapters
       .filter((adapter) => typeof adapter.disconnect === 'function')
       .map((adapter) => adapter.id);
-    expect(supporting).toEqual(['rabe']);
+    expect(supporting).toEqual(['rabe', 'ledger']);
   });
 
   it('exposes signAuthEntry only on adapters whose wallet API supports it', () => {
